@@ -72,17 +72,17 @@ pub struct ExecuteWithSessionKey<'info> {
 
     /// The session key being used to sign this transaction
     pub session_signer: Signer<'info>,
-    
+
     /// The authority account (owner of funds) - only required for transfers
     /// CHECK: This account is validated against user_account.authority when present
     #[account(mut)]
     pub from: Option<AccountInfo<'info>>,
-    
+
     /// The recipient account - only required for transfers
     /// CHECK: This can be any account that will receive funds
     #[account(mut)]
     pub to: Option<AccountInfo<'info>>,
-    
+
     /// System program - only required for transfers
     pub system_program: Option<Program<'info, System>>,
 }
