@@ -62,7 +62,7 @@ Check out `app/examples.ts` for complete working examples:
 
 ```bash
 # Run all examples
-yarn tsx app/examples.ts
+bun run app/examples.ts
 
 # The examples show:
 # - Basic session key creation
