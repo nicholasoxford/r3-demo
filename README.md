@@ -6,12 +6,16 @@ A Solana program that lets you create temporary session keys with custom permiss
 
 Session keys are temporary keypairs that can act on behalf of your main wallet, but with restrictions you define:
 
-- Set expiration times (keys auto-expire after X seconds/hours/days)
+- Set expiration times using either block height or clock time (keys auto-expire after X seconds/hours/days)
 - Control what they can do (transfers, delegate, custom actions)
 - Set transfer limits
 - Revoke them instantly if needed
 
 Useful for things like mobile apps, trading bots, team wallets, or any situation where you want to delegate limited authority without exposing your main wallet.
+
+## Why Anchor?
+
+I went with Anchor for this project because speed matters. Could've gone with Pinocchio for smaller binary size and better CU optimization, but that's premature optimization. My approach: ship something that works first, then optimize once you've got a solid baseline to measure against. Anchor gets you from idea to working prototype fast, which is exactly what you need when you're balancing product impact with shipping velocity.
 
 ## Setup
 
