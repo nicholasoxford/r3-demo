@@ -443,6 +443,8 @@ export {
   cleanupExpiredKeys,
   demonstrateExpirationTypes,
   demonstrateRealTransfers,
+  subscriptionServiceExample,
+  defiYieldHarvestingBot,
 };
 
 /**
@@ -510,26 +512,7 @@ async function demonstrateExpirationTypes() {
   console.log("   ✅ Block height-based session key created");
   console.log("   ⛓️  Expires after 1000 blocks (~7-8 minutes on mainnet)");
 
-  // Example 3: Compare use cases
-  console.log("\n3. Use Case Comparison:");
-  console.log("\n   Time-Based Expiration:");
-  console.log('   - ✅ Intuitive for users ("expires at 3pm")');
-  console.log("   - ✅ Good for scheduled access windows");
-  console.log("   - ⚠️  Can be affected by clock drift");
-  console.log("   - 📱 Best for: User sessions, API keys, temporary access");
-
-  console.log("\n   Block Height-Based Expiration:");
-  console.log("   - ✅ Deterministic and verifiable on-chain");
-  console.log("   - ✅ Immune to clock manipulation");
-  console.log("   - ✅ Precise control over transaction windows");
-  console.log("   - ⚠️  Less intuitive for end users");
-  console.log(
-    "   - 🤖 Best for: Smart contracts, DeFi protocols, automated systems"
-  );
-
   // Example 4: Hybrid approach for maximum flexibility
-  console.log("\n4. Hybrid Approach Example:");
-  console.log("   You could create two keys for critical operations:");
 
   const hybridTimeKey = Keypair.generate();
   const hybridBlockKey = Keypair.generate();
@@ -561,9 +544,6 @@ async function demonstrateExpirationTypes() {
       customFlags: 2, // Flag for "block-critical"
     }
   );
-
-  console.log("   ✅ Created both time and block-based keys for redundancy");
-  console.log("   💡 Application can choose which to use based on context");
 
   // Get and display all session keys with their expiration types
   const allKeys = await sdk.getSessionKeys(authority.publicKey);
@@ -598,7 +578,8 @@ async function demonstrateExpirationTypes() {
 async function demonstrateRealTransfers() {
   console.log("\n=== Example 12: Real SOL Transfers with Session Keys ===\n");
 
-  const { sdk, authority, connection } = await initializeSDK();
+  const connection = new Connection("http://localhost:8899", "confirmed");
+  const { sdk, authority } = await initializeSDK();
 
   // Initialize user account
   await sdk.initializeUserAccount(authority.publicKey);
@@ -649,10 +630,17 @@ async function demonstrateRealTransfers() {
       `   Transferring ${transferAmount / LAMPORTS_PER_SOL} SOL to recipient...`
     );
 
-    // Note: In a real implementation, you'd call executeWithSessionKey here
-    // For demonstration, we're showing the flow
+    // Execute real transfer
+    await sdk.executeTransferWithSessionKey(
+      authority.publicKey,
+      limitedKey,
+      recipient1.publicKey,
+      new BN(transferAmount)
+    );
+
+    const balance = await connection.getBalance(recipient1.publicKey);
     console.log(`   ✅ Transfer successful (within 0.1 SOL limit)`);
-    console.log(`   📊 Recipient 1 received: 0.05 SOL`);
+    console.log(`   📊 Recipient 1 balance: ${balance / LAMPORTS_PER_SOL} SOL`);
   } catch (error) {
     console.log(`   ❌ Transfer failed: ${error}`);
   }
@@ -689,8 +677,18 @@ async function demonstrateRealTransfers() {
     console.log(
       `   Transferring ${transferAmount / LAMPORTS_PER_SOL} SOL to recipient...`
     );
+
+    // Execute real transfer with unlimited key
+    await sdk.executeTransferWithSessionKey(
+      authority.publicKey,
+      unlimitedKey,
+      recipient2.publicKey,
+      new BN(transferAmount)
+    );
+
+    const balance = await connection.getBalance(recipient2.publicKey);
     console.log(`   ✅ Transfer successful (no limit)`);
-    console.log(`   📊 Recipient 2 received: 0.5 SOL`);
+    console.log(`   📊 Recipient 2 balance: ${balance / LAMPORTS_PER_SOL} SOL`);
   } catch (error) {
     console.log(`   ❌ Transfer failed: ${error}`);
   }
@@ -705,10 +703,19 @@ async function demonstrateRealTransfers() {
     console.log(
       `   Attempting ${transferAmount / LAMPORTS_PER_SOL} SOL transfer...`
     );
-    // This should fail
-    console.log(`   ❌ This should fail due to exceeding limit`);
-  } catch (error) {
+
+    // This should fail due to exceeding the limit
+    await sdk.executeTransferWithSessionKey(
+      authority.publicKey,
+      limitedKey,
+      recipient3.publicKey,
+      new BN(transferAmount)
+    );
+
+    console.log(`   ❌ This should not have succeeded!`);
+  } catch (error: any) {
     console.log(`   ✅ Correctly rejected: Transfer exceeds session key limit`);
+    console.log(`   📝 Error: ${error.toString().split("\n")[0]}`);
   }
 
   // Example 4: Multi-signature pattern with session keys
@@ -735,7 +742,11 @@ async function demonstrateRealTransfers() {
   );
   await connection.confirmTransaction(airdrop3);
 
-  const recipients = [recipient1, recipient2, recipient3];
+  const recipients = [
+    { keypair: recipient1, name: "Employee A" },
+    { keypair: recipient2, name: "Employee B" },
+    { keypair: recipient3, name: "Contractor C" },
+  ];
   const paymentAmount = 0.01 * LAMPORTS_PER_SOL;
 
   console.log(
@@ -743,17 +754,38 @@ async function demonstrateRealTransfers() {
       paymentAmount / LAMPORTS_PER_SOL
     } SOL each:`
   );
+
+  let successfulPayments = 0;
   for (let i = 0; i < recipients.length; i++) {
-    console.log(
-      `   ✅ Payment ${i + 1}: Sent to ${recipients[i].publicKey
-        .toBase58()
-        .slice(0, 8)}...`
-    );
+    try {
+      // Execute real batch payment
+      await sdk.executeTransferWithSessionKey(
+        authority.publicKey,
+        batchKey,
+        recipients[i].keypair.publicKey,
+        new BN(paymentAmount)
+      );
+
+      const balance = await connection.getBalance(
+        recipients[i].keypair.publicKey
+      );
+      console.log(
+        `   ✅ Payment ${i + 1}: Sent to ${recipients[i].name} (${recipients[
+          i
+        ].keypair.publicKey
+          .toBase58()
+          .slice(0, 8)}...) - Balance: ${balance / LAMPORTS_PER_SOL} SOL`
+      );
+      successfulPayments++;
+    } catch (error) {
+      console.log(`   ❌ Payment ${i + 1} failed: ${error}`);
+    }
   }
+
   console.log(
     `   📊 Total transferred: ${
-      (paymentAmount * recipients.length) / LAMPORTS_PER_SOL
-    } SOL`
+      (paymentAmount * successfulPayments) / LAMPORTS_PER_SOL
+    } SOL across ${successfulPayments} payments`
   );
 
   // Summary
@@ -771,6 +803,236 @@ async function demonstrateRealTransfers() {
   console.log(
     `\n💰 Final authority balance: ${finalBalance / LAMPORTS_PER_SOL} SOL`
   );
+}
+
+/**
+ * Example 13: Subscription Service with Auto-payments
+ *
+ * Demonstrates how session keys enable subscription services to collect
+ * payments automatically without user interaction for each payment.
+ */
+async function subscriptionServiceExample() {
+  console.log(
+    "\n=== Example 13: Subscription Service with Auto-payments ===\n"
+  );
+
+  const connection = new Connection("http://localhost:8899", "confirmed");
+  const { sdk, authority } = await initializeSDK();
+
+  // Initialize user account (subscriber)
+  await sdk.initializeUserAccount(authority.publicKey);
+  console.log("👤 Subscriber account initialized");
+  console.log(
+    `💳 Subscriber wallet: ${authority.publicKey.toBase58().slice(0, 20)}...`
+  );
+  console.log(
+    `💰 Initial balance: ${
+      (await connection.getBalance(authority.publicKey)) / LAMPORTS_PER_SOL
+    } SOL\n`
+  );
+
+  // Service provider's wallet
+  const serviceProvider = Keypair.generate();
+  console.log("🏢 Service Provider: Netflix-on-Solana");
+  console.log(
+    `   Wallet: ${serviceProvider.publicKey.toBase58().slice(0, 20)}...`
+  );
+
+  // Create a monthly subscription session key
+  console.log("\n📝 Setting up subscription:");
+  const subscriptionKey = generateSessionKey();
+  const monthlyFee = 0.05 * LAMPORTS_PER_SOL; // 0.05 SOL per month
+
+  // Create session key with monthly limit
+  await sdk.createSessionKey(
+    authority.publicKey,
+    subscriptionKey.publicKey,
+    30 * 24 * 3600, // 30 days validity
+    {
+      canTransfer: true,
+      canDelegate: false,
+      canExecuteCustom: false,
+      maxTransferAmount: new BN(monthlyFee), // Exactly monthly fee
+      customFlags: 1, // Flag for "subscription payment"
+    }
+  );
+  console.log("   ✅ Subscription authorized for 30 days");
+  console.log(`   💵 Monthly fee: ${monthlyFee / LAMPORTS_PER_SOL} SOL`);
+  console.log(
+    `   🔑 Session key: ${subscriptionKey.publicKey.toBase58().slice(0, 20)}...`
+  );
+
+  // Fund the session key for gas
+  const airdrop = await connection.requestAirdrop(
+    subscriptionKey.publicKey,
+    0.001 * LAMPORTS_PER_SOL
+  );
+  await connection.confirmTransaction(airdrop);
+
+  // Simulate monthly payment collection
+  console.log("\n💳 Processing monthly subscription payment:");
+
+  try {
+    const beforeBalance = await connection.getBalance(authority.publicKey);
+
+    // Service collects payment using the session key
+    await sdk.executeTransferWithSessionKey(
+      authority.publicKey,
+      subscriptionKey,
+      serviceProvider.publicKey,
+      new BN(monthlyFee)
+    );
+
+    const afterBalance = await connection.getBalance(authority.publicKey);
+    const providerBalance = await connection.getBalance(
+      serviceProvider.publicKey
+    );
+
+    console.log("   ✅ Payment collected successfully!");
+    console.log(
+      `   📊 Subscriber charged: ${
+        (beforeBalance - afterBalance) / LAMPORTS_PER_SOL
+      } SOL`
+    );
+    console.log(
+      `   📊 Service provider received: ${
+        providerBalance / LAMPORTS_PER_SOL
+      } SOL`
+    );
+    console.log("   🎬 Access granted for current billing period");
+  } catch (error) {
+    console.log(`   ❌ Payment failed: ${error}`);
+    console.log("   🚫 Service access suspended");
+  }
+
+  // Show renewal process
+  console.log("\n🔄 Subscription Renewal Process:");
+  console.log("   1. Session key expires after 30 days");
+  console.log("   2. User must explicitly renew (create new session key)");
+  console.log("   3. Prevents unauthorized charges after cancellation");
+  console.log("   4. User maintains full control over their funds");
+
+  // Benefits summary
+  console.log("\n✨ Benefits of Session Keys for Subscriptions:");
+  console.log("   • No need to sign each monthly payment");
+  console.log("   • Automatic payment collection by service");
+  console.log("   • User can cancel anytime by revoking key");
+  console.log("   • Built-in spending limits prevent overcharging");
+  console.log("   • Time-bound authorization for security");
+}
+
+/**
+ * Example 14: DeFi Yield Harvesting Bot
+ *
+ * Shows how session keys enable automated DeFi strategies
+ * with built-in risk management.
+ */
+async function defiYieldHarvestingBot() {
+  console.log("\n=== Example 14: DeFi Yield Harvesting Bot ===\n");
+
+  const connection = new Connection("http://localhost:8899", "confirmed");
+  const { sdk, authority } = await initializeSDK();
+
+  // Initialize user account
+  await sdk.initializeUserAccount(authority.publicKey);
+  console.log("🌾 DeFi User account initialized");
+  console.log(
+    `💰 Portfolio value: ${
+      (await connection.getBalance(authority.publicKey)) / LAMPORTS_PER_SOL
+    } SOL\n`
+  );
+
+  // Create different session keys for different risk levels
+  console.log("🤖 Setting up yield harvesting bot with risk tiers:\n");
+
+  // Low risk operations
+  const lowRiskKey = generateSessionKey();
+  await sdk.createSessionKey(
+    authority.publicKey,
+    lowRiskKey.publicKey,
+    24 * 3600, // 24 hours
+    {
+      canTransfer: true,
+      canDelegate: false,
+      canExecuteCustom: true,
+      maxTransferAmount: new BN(0.1 * LAMPORTS_PER_SOL), // Max 0.1 SOL per tx
+      customFlags: 10, // Low risk flag
+    }
+  );
+  console.log("   🟢 Low Risk Key: Stable pools only");
+  console.log("      • Max transaction: 0.1 SOL");
+  console.log("      • Valid for: 24 hours");
+  console.log("      • Can compound yields automatically");
+
+  // Medium risk operations
+  const mediumRiskKey = generateSessionKey();
+  await sdk.createSessionKey(
+    authority.publicKey,
+    mediumRiskKey.publicKey,
+    12 * 3600, // 12 hours
+    {
+      canTransfer: true,
+      canDelegate: false,
+      canExecuteCustom: true,
+      maxTransferAmount: new BN(0.5 * LAMPORTS_PER_SOL), // Max 0.5 SOL per tx
+      customFlags: 20, // Medium risk flag
+    }
+  );
+  console.log("\n   🟡 Medium Risk Key: Yield farming");
+  console.log("      • Max transaction: 0.5 SOL");
+  console.log("      • Valid for: 12 hours");
+  console.log("      • Can swap tokens and provide liquidity");
+
+  // High risk operations (very limited)
+  const highRiskKey = generateSessionKey();
+  await sdk.createSessionKeyWithBlockHeight(
+    authority.publicKey,
+    highRiskKey.publicKey,
+    900, // ~6-7 minutes worth of blocks
+    {
+      canTransfer: true,
+      canDelegate: false,
+      canExecuteCustom: true,
+      maxTransferAmount: new BN(1 * LAMPORTS_PER_SOL), // Max 1 SOL per tx
+      customFlags: 30, // High risk flag
+    }
+  );
+  console.log("\n   🔴 High Risk Key: Leveraged positions");
+  console.log("      • Max transaction: 1 SOL");
+  console.log("      • Valid for: 900 blocks (~7 minutes)");
+  console.log("      • Can open leveraged positions");
+  console.log("      • Block-based expiry for precise control");
+
+  // Risk management summary
+  console.log("\n🛡️ Risk Management Features:");
+  console.log("   • Tiered permission system based on risk");
+  console.log("   • Shorter validity for higher risk operations");
+  console.log("   • Transaction limits prevent catastrophic losses");
+  console.log("   • Block-height expiry for time-critical operations");
+  console.log("   • Emergency revoke all for black swan events");
+
+  console.log("\n📈 Bot Operations (Simulated):");
+  console.log("   • Harvesting yield from stable pools...");
+  console.log("   • Rebalancing portfolio positions...");
+  console.log("   • Compounding earned rewards...");
+  console.log("   ✅ Operations completed within risk parameters");
+}
+
+// Run all examples or individual ones
+if (require.main === module) {
+  // If running this file directly, you can choose which examples to run
+  const args = process.argv.slice(2);
+
+  if (args.includes("--subscription")) {
+    subscriptionServiceExample().catch(console.error);
+  } else if (args.includes("--defi")) {
+    defiYieldHarvestingBot().catch(console.error);
+  } else if (args.includes("--transfers")) {
+    demonstrateRealTransfers().catch(console.error);
+  } else {
+    // Run all examples by default
+    runExamples().catch(console.error);
+  }
 }
 
 runExamples();

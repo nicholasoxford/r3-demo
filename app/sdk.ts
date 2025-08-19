@@ -247,23 +247,56 @@ export class SessionKeySDK {
   async executeWithSessionKey(
     authority: PublicKey,
     sessionKeySigner: Keypair,
-    action: SessionAction
+    action: SessionAction,
+    additionalAccounts?: {
+      from?: PublicKey;
+      to?: PublicKey;
+    }
   ): Promise<string> {
     const [userAccountPDA] = await this.getUserAccountPDA(authority);
 
+    // Determine if this is a transfer action
+    const isTransfer = "transfer" in action;
+
+    const accounts = {
+      userAccount: userAccountPDA,
+      sessionSigner: sessionKeySigner.publicKey,
+      from: isTransfer ? additionalAccounts?.from || authority : null,
+      to: isTransfer
+        ? additionalAccounts?.to || (action as any).transfer.recipient
+        : null,
+      systemProgram: isTransfer ? SystemProgram.programId : null,
+    };
+
     const tx = await this.program.methods
       .executeWithSessionKey(action)
-      .accountsStrict({
-        userAccount: userAccountPDA,
-        sessionSigner: sessionKeySigner.publicKey,
-        from: null,
-        to: null,
-        systemProgram: null,
-      })
+      .accountsStrict(accounts)
       .signers([sessionKeySigner])
       .rpc();
 
     return tx;
+  }
+
+  /**
+   * Execute a transfer using a session key (convenience method)
+   */
+  async executeTransferWithSessionKey(
+    authority: PublicKey,
+    sessionKeySigner: Keypair,
+    recipient: PublicKey,
+    amount: BN
+  ): Promise<string> {
+    const action = {
+      transfer: {
+        recipient,
+        amount,
+      },
+    };
+
+    return this.executeWithSessionKey(authority, sessionKeySigner, action, {
+      from: authority,
+      to: recipient,
+    });
   }
 
   /**

@@ -328,10 +328,14 @@ describe("Time-bound Session Keys", () => {
 
       // Create recipient account
       const recipient = Keypair.generate();
-      
+
       // Get initial balances
-      const authorityBalanceBefore = await provider.connection.getBalance(authority.publicKey);
-      const recipientBalanceBefore = await provider.connection.getBalance(recipient.publicKey);
+      const authorityBalanceBefore = await provider.connection.getBalance(
+        authority.publicKey
+      );
+      const recipientBalanceBefore = await provider.connection.getBalance(
+        recipient.publicKey
+      );
 
       // Execute a transfer action with time-based key
       const transferAmount = new anchor.BN(50000000); // 0.05 SOL
@@ -355,21 +359,37 @@ describe("Time-bound Session Keys", () => {
         .rpc();
 
       // Verify the transfer actually happened
-      const authorityBalanceAfter = await provider.connection.getBalance(authority.publicKey);
-      const recipientBalanceAfter = await provider.connection.getBalance(recipient.publicKey);
-      
+      const authorityBalanceAfter = await provider.connection.getBalance(
+        authority.publicKey
+      );
+      const recipientBalanceAfter = await provider.connection.getBalance(
+        recipient.publicKey
+      );
+
       assert.equal(
         recipientBalanceAfter - recipientBalanceBefore,
         transferAmount.toNumber(),
         "Recipient should receive the transferred amount"
       );
-      assert.equal(
-        authorityBalanceBefore - authorityBalanceAfter,
-        transferAmount.toNumber(),
-        "Authority balance should decrease by transferred amount"
+
+      // The authority balance decreases by transfer amount + transaction fee
+      const authorityBalanceDecrease =
+        authorityBalanceBefore - authorityBalanceAfter;
+      assert(
+        authorityBalanceDecrease >= transferAmount.toNumber(),
+        "Authority balance should decrease by at least the transferred amount"
       );
-      
-      console.log(`✅ Transferred ${transferAmount.toNumber() / anchor.web3.LAMPORTS_PER_SOL} SOL using session key`);
+      assert(
+        authorityBalanceDecrease < transferAmount.toNumber() + 50000, // Max reasonable fee
+        "Authority balance decrease should be transfer amount plus reasonable fee"
+      );
+
+      const txFee = authorityBalanceDecrease - transferAmount.toNumber();
+      console.log(
+        `✅ Transferred ${
+          transferAmount.toNumber() / anchor.web3.LAMPORTS_PER_SOL
+        } SOL using time-based session key (tx fee: ${txFee} lamports)`
+      );
     });
 
     it("Should execute action with valid block-height session key", async () => {
@@ -382,10 +402,14 @@ describe("Time-bound Session Keys", () => {
 
       // Create recipient account
       const recipient = Keypair.generate();
-      
+
       // Get initial balances
-      const authorityBalanceBefore = await provider.connection.getBalance(authority.publicKey);
-      const recipientBalanceBefore = await provider.connection.getBalance(recipient.publicKey);
+      const authorityBalanceBefore = await provider.connection.getBalance(
+        authority.publicKey
+      );
+      const recipientBalanceBefore = await provider.connection.getBalance(
+        recipient.publicKey
+      );
 
       // Execute a transfer action with block-height key (respecting the 0.1 SOL limit)
       const transferAmount = new anchor.BN(100000000); // 0.1 SOL (at the limit)
@@ -409,16 +433,24 @@ describe("Time-bound Session Keys", () => {
         .rpc();
 
       // Verify the transfer actually happened
-      const authorityBalanceAfter = await provider.connection.getBalance(authority.publicKey);
-      const recipientBalanceAfter = await provider.connection.getBalance(recipient.publicKey);
-      
+      const authorityBalanceAfter = await provider.connection.getBalance(
+        authority.publicKey
+      );
+      const recipientBalanceAfter = await provider.connection.getBalance(
+        recipient.publicKey
+      );
+
       assert.equal(
         recipientBalanceAfter - recipientBalanceBefore,
         transferAmount.toNumber(),
         "Recipient should receive the transferred amount"
       );
-      
-      console.log(`✅ Transferred ${transferAmount.toNumber() / anchor.web3.LAMPORTS_PER_SOL} SOL using block-height session key`);
+
+      console.log(
+        `✅ Transferred ${
+          transferAmount.toNumber() / anchor.web3.LAMPORTS_PER_SOL
+        } SOL using block-height session key`
+      );
     });
 
     it("Should fail to execute with insufficient permissions", async () => {
@@ -480,7 +512,9 @@ describe("Time-bound Session Keys", () => {
         assert.fail("Should have thrown an error");
       } catch (error) {
         assert.include(error.toString(), "InsufficientPermissions");
-        console.log("✅ Correctly rejected transfer exceeding session key limit");
+        console.log(
+          "✅ Correctly rejected transfer exceeding session key limit"
+        );
       }
     });
 
