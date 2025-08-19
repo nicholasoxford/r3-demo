@@ -256,6 +256,9 @@ export class SessionKeySDK {
       .accountsStrict({
         userAccount: userAccountPDA,
         sessionSigner: sessionKeySigner.publicKey,
+        from: null,
+        to: null,
+        systemProgram: null,
       })
       .signers([sessionKeySigner])
       .rpc();
