@@ -39,17 +39,32 @@ import { SessionKeySDK, PermissionPreset } from "./app/sdk";
 const sdk = await SessionKeySDK.init(connection, programId, wallet);
 await sdk.initializeUserAccount(authority);
 
-// Create a session key that can only transfer funds for 1 hour
-const sessionKey = Keypair.generate();
+// Option 1: Time-based expiration (in seconds)
+const timeKey = Keypair.generate();
 await sdk.createSessionKeyWithPreset(
   authority,
-  sessionKey.publicKey,
+  timeKey.publicKey,
   3600, // expires in 1 hour
   PermissionPreset.TRANSFER_ONLY
 );
 
-// Use it to transfer
-await sdk.executeWithSessionKey(authority, sessionKey, {
+// Option 2: Block height-based expiration
+const blockKey = Keypair.generate();
+await sdk.createSessionKeyWithBlockHeight(
+  authority,
+  blockKey.publicKey,
+  900, // expires after ~900 blocks (~6-7 minutes on mainnet)
+  {
+    canTransfer: true,
+    canDelegate: false,
+    canExecuteCustom: false,
+    maxTransferAmount: new BN(1000000000), // 1 SOL max
+    customFlags: 0,
+  }
+);
+
+// Use either key to transfer
+await sdk.executeWithSessionKey(authority, timeKey, {
   transfer: {
     recipient: someWallet,
     amount: new BN(100000000), // 0.1 SOL
@@ -57,7 +72,7 @@ await sdk.executeWithSessionKey(authority, sessionKey, {
 });
 
 // Revoke when done (or let it expire)
-await sdk.revokeSessionKey(authority, sessionKey.publicKey);
+await sdk.revokeSessionKey(authority, timeKey.publicKey);
 ```
 
 ## Running Examples
