@@ -26,8 +26,12 @@ yarn install
 # Build
 anchor build
 
-# Test
-anchor test
+# Test locally
+# Terminal 1: Start local validator
+solana-test-validator --reset
+
+# Terminal 2: Run tests (builds, deploys, and tests)
+anchor test --skip-local-validator
 ```
 
 ## Quick Example
@@ -83,13 +87,13 @@ Check out `app/examples.ts` for complete working examples:
 # Run all examples
 bun run app/examples.ts
 
-# The examples show:
-# - Basic session key creation
-# - Different permission presets
-# - Transfer operations
-# - Creating sub-keys
-# - Revoking keys
-# - Cleanup operations
+# Examples included:
+# - Expiration Types: Time vs block height expiration
+# - Permission Examples: Presets and custom permissions
+# - Team Wallet: Role-based access control
+# - Key Management: Rotation and revocation
+# - Cleanup Operations: Remove expired keys
+# - Real Transfers: Actual SOL transfers with limits
 ```
 
 ## Tests
