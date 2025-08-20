@@ -47,3 +47,4 @@ export async function createMintAndAtas(
     recipientAta: recipientAtaAcc.address,
   };
 }
+

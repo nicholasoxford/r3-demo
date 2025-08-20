@@ -315,8 +315,8 @@ async function realTransfers() {
     sessionKey.publicKey,
     0.01 * LAMPORTS_PER_SOL
   );
-  await connection.confirmTransaction(sig, "confirmed");
-
+  const txSig = await connection.confirmTransaction(sig, "confirmed");
+  console.log(txSig);
   // Perform delegated transfer using the session key signer
   await sdk.splDelegatedTransfer(
     authority.publicKey,
