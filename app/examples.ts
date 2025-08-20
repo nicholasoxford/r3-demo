@@ -52,7 +52,7 @@ async function expirationTypes() {
   // Time-based expiration (traditional)
   const timeKey = generateSessionKey();
   await sdk.createSessionKeyWithPreset(
-    authority.publicKey,
+    authority,
     timeKey.publicKey,
     3600, // 1 hour
     PermissionPreset.TRANSFER_ONLY
@@ -94,7 +94,7 @@ async function permissionExamples() {
   // Use preset for mobile wallet
   const mobileKey = generateSessionKey();
   await sdk.createSessionKey(
-    authority.publicKey,
+    authority,
     mobileKey.publicKey,
     86400, // 24 hours
     {
@@ -110,7 +110,7 @@ async function permissionExamples() {
   // Trading bot with custom permissions
   const botKey = generateSessionKey();
   await sdk.createSessionKey(
-    authority.publicKey,
+    authority,
     botKey.publicKey,
     3600, // 1 hour
     {
@@ -126,7 +126,7 @@ async function permissionExamples() {
   // Read-only observer key
   const observerKey = generateSessionKey();
   await sdk.createSessionKeyWithPreset(
-    authority.publicKey,
+    authority,
     observerKey.publicKey,
     604800, // 1 week
     PermissionPreset.READ_ONLY
@@ -149,24 +149,19 @@ async function teamWallet() {
 
     if (role.permissions) {
       await sdk.createSessionKeyWithPreset(
-        authority.publicKey,
+        authority,
         key.publicKey,
         role.days * 86400,
         role.permissions
       );
     } else if (role.maxTransfer) {
-      await sdk.createSessionKey(
-        authority.publicKey,
-        key.publicKey,
-        role.days * 86400,
-        {
-          canTransfer: true,
-          canDelegate: false,
-          canExecuteCustom: true,
-          maxTransferAmount: new BN(role.maxTransfer * LAMPORTS_PER_SOL),
-          customFlags: 0,
-        }
-      );
+      await sdk.createSessionKey(authority, key.publicKey, role.days * 86400, {
+        canTransfer: true,
+        canDelegate: false,
+        canExecuteCustom: true,
+        maxTransferAmount: new BN(role.maxTransfer * LAMPORTS_PER_SOL),
+        customFlags: 0,
+      });
     }
 
     console.log(`✅ ${role.name}: ${role.days} day access`);
@@ -180,7 +175,7 @@ async function keyManagement() {
   // Create and rotate keys
   const oldKey = generateSessionKey();
   await sdk.createSessionKeyWithPreset(
-    authority.publicKey,
+    authority,
     oldKey.publicKey,
     3600,
     PermissionPreset.FULL_ACCESS
@@ -189,7 +184,7 @@ async function keyManagement() {
 
   const newKey = generateSessionKey();
   await sdk.createSessionKeyWithPreset(
-    authority.publicKey,
+    authority,
     newKey.publicKey,
     3600,
     PermissionPreset.FULL_ACCESS
@@ -201,7 +196,7 @@ async function keyManagement() {
   const keys = [generateSessionKey(), generateSessionKey()];
   for (const key of keys) {
     await sdk.createSessionKeyWithPreset(
-      authority.publicKey,
+      authority,
       key.publicKey,
       86400,
       PermissionPreset.TRANSFER_ONLY
@@ -227,7 +222,7 @@ async function cleanupExpiredKeys() {
 
   for (const { key, duration } of shortLivedKeys) {
     await sdk.createSessionKeyWithPreset(
-      authority.publicKey,
+      authority,
       key.publicKey,
       duration,
       PermissionPreset.READ_ONLY
@@ -302,7 +297,7 @@ async function realTransfers() {
 
   // Create a session key with transfer permissions and a 0.5 token limit
   const sessionKey = generateSessionKey();
-  await sdk.createSessionKey(authority.publicKey, sessionKey.publicKey, 300, {
+  await sdk.createSessionKey(authority, sessionKey.publicKey, 300, {
     canTransfer: true,
     canDelegate: false,
     canExecuteCustom: false,
@@ -315,8 +310,10 @@ async function realTransfers() {
     sessionKey.publicKey,
     0.01 * LAMPORTS_PER_SOL
   );
-  const txSig = await connection.confirmTransaction(sig, "confirmed");
-  console.log(txSig);
+  await connection.confirmTransaction(sig, "confirmed");
+
+  console.log("✅ Session key funded with 0.01 SOL");
+
   // Perform delegated transfer using the session key signer
   await sdk.splDelegatedTransfer(
     authority.publicKey,

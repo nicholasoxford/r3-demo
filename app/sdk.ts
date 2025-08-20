@@ -76,7 +76,7 @@ export class SessionKeySDK {
       this.program.programId
     );
 
-    return this.program.methods
+    const instructions = await this.program.methods
       .splDelegatedTransfer(amount)
       .accountsStrict({
         sessionSigner: sessionKeySigner.publicKey,
@@ -90,7 +90,15 @@ export class SessionKeySDK {
         ),
       })
       .signers([sessionKeySigner])
-      .rpc();
+      .instruction();
+    const connection = new Connection("http://localhost:8899", {
+      commitment: "confirmed",
+    });
+    const tx = new Transaction().add(instructions);
+    const sig = await connection.sendTransaction(tx, [sessionKeySigner]);
+    console.log("sig", sig);
+    await connection.confirmTransaction(sig, "confirmed");
+    return sig;
   }
 
   // Build-only variant to avoid implicit provider signing; use with sendAndConfirmTransaction
@@ -250,15 +258,15 @@ export class SessionKeySDK {
    * Create a new session key with specified permissions
    */
   async createSessionKey(
-    authority: PublicKey,
+    authority: Keypair,
     sessionKeyPubkey: PublicKey,
     durationSeconds: number,
     permissions: SessionPermissions
   ): Promise<string> {
-    const [userAccountPDA] = await this.getUserAccountPDA(authority);
+    const [userAccountPDA] = await this.getUserAccountPDA(authority.publicKey);
     const expiresAt = new BN(Math.floor(Date.now() / 1000) + durationSeconds);
 
-    const tx = await this.program.methods
+    const ix = await this.program.methods
       .createSessionKey(
         sessionKeyPubkey,
         expiresAt,
@@ -267,12 +275,19 @@ export class SessionKeySDK {
       )
       .accountsStrict({
         userAccount: userAccountPDA,
-        authority: authority,
+        authority: authority.publicKey,
         systemProgram: SystemProgram.programId,
       })
-      .rpc();
+      .instruction();
 
-    return tx;
+    const connection = new Connection("http://localhost:8899", {
+      commitment: "confirmed",
+    });
+    const tx = new Transaction().add(ix);
+    const sig = await connection.sendTransaction(tx, [authority]);
+    console.log("sig", sig);
+    await connection.confirmTransaction(sig, "confirmed");
+    return sig;
   }
 
   /**
@@ -311,7 +326,7 @@ export class SessionKeySDK {
    * Create a session key with preset permission templates
    */
   async createSessionKeyWithPreset(
-    authority: PublicKey,
+    authority: Keypair,
     sessionKeyPubkey: PublicKey,
     durationSeconds: number,
     preset: PermissionPreset
@@ -552,7 +567,7 @@ export class SessionKeySDK {
    * Batch create multiple session keys
    */
   async batchCreateSessionKeys(
-    authority: PublicKey,
+    authority: Keypair,
     sessionKeys: BatchSessionKeyParams[]
   ): Promise<string[]> {
     const txs: string[] = [];
