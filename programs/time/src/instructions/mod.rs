@@ -1,7 +1,10 @@
 pub mod cleanup_session_keys;
 pub mod create_session_key;
-pub mod execute_with_session_key;
 pub mod initialize_user_account;
 pub mod revoke_all_session_keys;
 pub mod revoke_session_key;
+pub mod spl_approve_delegate;
+pub mod spl_delegated_transfer;
+pub mod spl_revoke_delegate;
+pub mod update_allowed_mints;
 pub mod update_session_key;

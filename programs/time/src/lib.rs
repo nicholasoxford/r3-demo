@@ -27,6 +27,15 @@ pub mod time {
         initialize_user_account::handler(ctx)
     }
 
+    /// Initialize with allowed mints and initial lamport deposit
+    pub fn initialize_user_account_with_config(
+        ctx: Context<InitializeUserAccountWithConfig>,
+        allowed_mints: Vec<Pubkey>,
+        initial_deposit_lamports: u64,
+    ) -> Result<()> {
+        initialize_user_account::handler_with_config(ctx, allowed_mints, initial_deposit_lamports)
+    }
+
     /// Create a new session key with specified permissions and expiry
     pub fn create_session_key(
         ctx: Context<CreateSessionKey>,
@@ -63,12 +72,7 @@ pub mod time {
     }
 
     /// Execute an action using a session key
-    pub fn execute_with_session_key(
-        ctx: Context<ExecuteWithSessionKey>,
-        action: SessionAction,
-    ) -> Result<()> {
-        execute_with_session_key::handler(ctx, action)
-    }
+    // Removed SOL execution endpoint; using SPL delegated transfer instead
 
     /// Clean up expired or revoked session keys to save space
     pub fn cleanup_session_keys(ctx: Context<CleanupSessionKeys>) -> Result<()> {
@@ -78,5 +82,28 @@ pub mod time {
     /// Revoke all session keys at once (emergency function)
     pub fn revoke_all_session_keys(ctx: Context<RevokeAllSessionKeys>) -> Result<()> {
         revoke_all_session_keys::handler(ctx)
+    }
+
+    // Removed SOL deposit/withdraw endpoints
+
+    // ===== SPL TOKEN FLOW =====
+    pub fn spl_approve_delegate(ctx: Context<SplApproveDelegate>, amount: u64) -> Result<()> {
+        spl_approve_delegate::handler(ctx, amount)
+    }
+
+    pub fn spl_delegated_transfer(ctx: Context<SplDelegatedTransfer>, amount: u64) -> Result<()> {
+        spl_delegated_transfer::handler(ctx, amount)
+    }
+
+    pub fn spl_revoke_delegate(ctx: Context<SplRevokeDelegate>) -> Result<()> {
+        spl_revoke_delegate::handler(ctx)
+    }
+
+    /// Update the list of allowed SPL mints for this user account
+    pub fn update_allowed_mints(
+        ctx: Context<UpdateAllowedMints>,
+        mints: Vec<Pubkey>,
+    ) -> Result<()> {
+        update_allowed_mints::handler(ctx, mints)
     }
 }

@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::state::{SessionPermissions, SessionAction};
+use crate::state::SessionPermissions;
 
 // ===== EVENTS =====
 
@@ -23,14 +23,6 @@ pub struct SessionKeyUpdated {
     pub session_key: Pubkey,
     pub expires_at: i64,
     pub permissions: SessionPermissions,
-}
-
-#[event]
-pub struct SessionActionExecuted {
-    pub authority: Pubkey,
-    pub session_key: Pubkey,
-    pub action: SessionAction,
-    pub timestamp: i64,
 }
 
 #[event]

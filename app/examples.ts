@@ -13,6 +13,11 @@ import {
   SessionPermissions,
 } from "./sdk";
 import { BN } from "@coral-xyz/anchor";
+import {
+  createMint,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+} from "@solana/spl-token";
 
 // Shared configuration
 const PROGRAM_ID = "DdtvbkajRMQj26vuAUaV96hDtzE1mzvB7k64VeWzoWib";
@@ -250,70 +255,79 @@ async function cleanupExpiredKeys() {
 
 // Example 6: Real SOL Transfers with Session Keys
 async function realTransfers() {
-  const { sdk, authority, connection } = await setupExample("Real Transfers");
+  const { sdk, authority, connection } = await setupExample("SPL Delegation");
 
-  console.log(
-    `💰 Authority balance: ${
-      (await connection.getBalance(authority.publicKey)) / LAMPORTS_PER_SOL
-    } SOL`
-  );
-
-  // Create recipients
-  const recipient1 = Keypair.generate();
-  const recipient2 = Keypair.generate();
-
-  // Limited transfer key
-  const limitedKey = generateSessionKey();
-  await sdk.createSessionKey(
+  // Create a new SPL mint (9 decimals) and two token accounts
+  const mint = await createMint(
+    connection,
+    authority,
     authority.publicKey,
-    limitedKey.publicKey,
-    300, // 5 minutes
-    {
-      canTransfer: true,
-      canDelegate: false,
-      canExecuteCustom: false,
-      maxTransferAmount: new BN(0.1 * LAMPORTS_PER_SOL),
-      customFlags: 0,
-    }
+    null,
+    9
   );
 
-  // Fund session key for gas
-  const airdrop = await connection.requestAirdrop(
-    limitedKey.publicKey,
+  const authorityAta = await getOrCreateAssociatedTokenAccount(
+    connection,
+    authority,
+    mint,
+    authority.publicKey
+  );
+
+  const recipient = Keypair.generate();
+  const recipientAta = await getOrCreateAssociatedTokenAccount(
+    connection,
+    authority,
+    mint,
+    recipient.publicKey
+  );
+
+  // Mint tokens to the authority
+  await mintTo(
+    connection,
+    authority,
+    mint,
+    authorityAta.address,
+    authority,
+    1_000_000_000n // 1 token with 9 decimals
+  );
+
+  // Approve PDA delegate for this mint
+  const approveAmount = new BN(600_000_000); // 0.6 tokens
+  await sdk.splApproveDelegate(
+    authority.publicKey,
+    authorityAta.address,
+    mint,
+    approveAmount
+  );
+
+  // Create a session key with transfer permissions and a 0.5 token limit
+  const sessionKey = generateSessionKey();
+  await sdk.createSessionKey(authority.publicKey, sessionKey.publicKey, 300, {
+    canTransfer: true,
+    canDelegate: false,
+    canExecuteCustom: false,
+    maxTransferAmount: new BN(500_000_000), // 0.5 tokens
+    customFlags: 0,
+  });
+
+  // Optional: fund session key for fees if you plan to send with it as fee payer
+  const sig = await connection.requestAirdrop(
+    sessionKey.publicKey,
     0.01 * LAMPORTS_PER_SOL
   );
-  await connection.confirmTransaction(airdrop);
+  await connection.confirmTransaction(sig, "confirmed");
 
-  // Transfer within limit
-  try {
-    await sdk.executeTransferWithSessionKey(
-      authority.publicKey,
-      limitedKey,
-      recipient1.publicKey,
-      new BN(0.05 * LAMPORTS_PER_SOL)
-    );
-    const balance = await connection.getBalance(recipient1.publicKey);
-    console.log(
-      `✅ Transferred 0.05 SOL (within limit) - recipient balance: ${
-        balance / LAMPORTS_PER_SOL
-      } SOL`
-    );
-  } catch (error) {
-    console.log(`❌ Transfer failed: ${error}`);
-  }
+  // Perform delegated transfer using the session key signer
+  await sdk.splDelegatedTransfer(
+    authority.publicKey,
+    sessionKey,
+    authorityAta.address,
+    recipientAta.address,
+    mint,
+    new BN(400_000_000) // 0.4 tokens (within 0.5 limit)
+  );
 
-  // Try to exceed limit (should fail)
-  try {
-    await sdk.executeTransferWithSessionKey(
-      authority.publicKey,
-      limitedKey,
-      recipient2.publicKey,
-      new BN(0.2 * LAMPORTS_PER_SOL) // Exceeds 0.1 SOL limit
-    );
-    console.log("❌ This should not have succeeded!");
-  } catch (error: any) {
-    console.log("✅ Correctly rejected: Transfer exceeds limit");
-  }
+  console.log("✅ Delegated SPL transfer of 0.4 tokens succeeded");
 }
 
 // Run all examples

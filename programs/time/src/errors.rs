@@ -27,4 +27,10 @@ pub enum ErrorCode {
 
     #[msg("Insufficient permissions for this action")]
     InsufficientPermissions,
+
+    #[msg("Mint is not allowed for this user account")]
+    MintNotAllowed,
+
+    #[msg("Too many allowed mints provided")]
+    TooManyAllowedMints,
 }

@@ -1,4 +1,4 @@
-use crate::constants::SESSION_KEY_SIZE;
+use crate::constants::{MAX_ALLOWED_MINTS, SESSION_KEY_SIZE};
 use anchor_lang::prelude::*;
 
 // ===== ACCOUNT STRUCTURES =====
@@ -11,6 +11,8 @@ pub struct UserAccount {
     pub session_keys: Vec<SessionKey>,
     /// Bump seed for PDA
     pub bump: u8,
+    /// Optional allowlist of SPL Token mints permitted for delegated transfers. Empty = allow any
+    pub allowed_mints: Vec<Pubkey>,
 }
 
 impl UserAccount {
@@ -20,7 +22,8 @@ impl UserAccount {
         8 + // discriminator
         32 + // authority
         4 + (max_keys * SESSION_KEY_SIZE) + // session_keys vec
-        1 // bump
+        1 + // bump
+        4 + (MAX_ALLOWED_MINTS * 32) // allowed_mints vec capacity
     }
 }
 
@@ -66,14 +69,6 @@ impl SessionKey {
     pub fn is_valid(&self, clock: &Clock) -> bool {
         !self.is_revoked && !self.is_expired(clock)
     }
-
-    /// Get a human-readable expiration description
-    pub fn expiration_description(&self) -> String {
-        match self.expiration_type {
-            ExpirationType::Time => format!("Expires at timestamp {}", self.expires_at),
-            ExpirationType::BlockHeight => format!("Expires at block height {}", self.expires_at),
-        }
-    }
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
@@ -102,18 +97,4 @@ impl Default for SessionPermissions {
     }
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub enum SessionAction {
-    Transfer {
-        recipient: Pubkey,
-        amount: u64,
-    },
-    Delegate {
-        new_session_key: Pubkey,
-        permissions: SessionPermissions,
-    },
-    Custom {
-        program_id: Pubkey,
-        data: Vec<u8>,
-    },
-}
+// Removed unused SessionAction enum

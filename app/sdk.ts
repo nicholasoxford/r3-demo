@@ -7,6 +7,7 @@ import {
   SystemProgram,
   Connection,
   Transaction,
+  TransactionInstruction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 
@@ -31,6 +32,152 @@ export class SessionKeySDK {
   constructor(program: Program<Time>, provider: AnchorProvider) {
     this.program = program;
     this.provider = provider;
+  }
+
+  // ===== SPL TOKEN HELPERS =====
+  async splApproveDelegate(
+    authority: PublicKey,
+    tokenAccount: PublicKey,
+    mint: PublicKey,
+    amount: BN
+  ): Promise<string> {
+    const [userAccountPDA] = await this.getUserAccountPDA(authority);
+    const [delegateAuthority] = PublicKey.findProgramAddressSync(
+      [Buffer.from("delegate"), userAccountPDA.toBuffer(), mint.toBuffer()],
+      this.program.programId
+    );
+
+    return this.program.methods
+      .splApproveDelegate(amount)
+      .accountsStrict({
+        userAccount: userAccountPDA,
+        authority,
+        tokenAccount,
+        mint,
+        delegateAuthority,
+        tokenProgram: new PublicKey(
+          "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        ),
+      })
+      .rpc();
+  }
+
+  async splDelegatedTransfer(
+    authority: PublicKey,
+    sessionKeySigner: Keypair,
+    fromToken: PublicKey,
+    toToken: PublicKey,
+    mint: PublicKey,
+    amount: BN
+  ): Promise<string> {
+    const [userAccountPDA] = await this.getUserAccountPDA(authority);
+    const [delegateAuthority] = PublicKey.findProgramAddressSync(
+      [Buffer.from("delegate"), userAccountPDA.toBuffer(), mint.toBuffer()],
+      this.program.programId
+    );
+
+    return this.program.methods
+      .splDelegatedTransfer(amount)
+      .accountsStrict({
+        sessionSigner: sessionKeySigner.publicKey,
+        userAccount: userAccountPDA,
+        fromToken,
+        toToken,
+        mint,
+        delegateAuthority,
+        tokenProgram: new PublicKey(
+          "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        ),
+      })
+      .signers([sessionKeySigner])
+      .rpc();
+  }
+
+  // Build-only variant to avoid implicit provider signing; use with sendAndConfirmTransaction
+  async buildSplDelegatedTransferIx(
+    authority: PublicKey,
+    sessionKeyPubkey: PublicKey,
+    fromToken: PublicKey,
+    toToken: PublicKey,
+    mint: PublicKey,
+    amount: BN
+  ): Promise<TransactionInstruction> {
+    const [userAccountPDA] = await this.getUserAccountPDA(authority);
+    const [delegateAuthority] = PublicKey.findProgramAddressSync(
+      [Buffer.from("delegate"), userAccountPDA.toBuffer(), mint.toBuffer()],
+      this.program.programId
+    );
+    return this.program.methods
+      .splDelegatedTransfer(amount)
+      .accountsStrict({
+        sessionSigner: sessionKeyPubkey,
+        userAccount: userAccountPDA,
+        fromToken,
+        toToken,
+        mint,
+        delegateAuthority,
+        tokenProgram: new PublicKey(
+          "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        ),
+      })
+      .instruction();
+  }
+
+  // Send a transaction using only the session key as fee payer/signer
+  async sendWithSessionKey(
+    sessionKey: Keypair,
+    instructions: TransactionInstruction[]
+  ): Promise<string> {
+    const tx = new Transaction();
+    tx.add(...instructions);
+    const { blockhash, lastValidBlockHeight } =
+      await this.provider.connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = sessionKey.publicKey;
+    tx.sign(sessionKey);
+    return sendAndConfirmTransaction(
+      this.provider.connection,
+      tx,
+      [sessionKey],
+      {
+        commitment: "confirmed",
+        minContextSlot: undefined,
+        skipPreflight: false,
+      }
+    );
+  }
+
+  async splRevokeDelegate(
+    authority: PublicKey,
+    tokenAccount: PublicKey
+  ): Promise<string> {
+    const [userAccountPDA] = await this.getUserAccountPDA(authority);
+
+    return this.program.methods
+      .splRevokeDelegate()
+      .accountsStrict({
+        userAccount: userAccountPDA,
+        authority,
+        tokenAccount,
+        tokenProgram: new PublicKey(
+          "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        ),
+      })
+      .rpc();
+  }
+
+  async updateAllowedMints(
+    authority: PublicKey,
+    mints: PublicKey[]
+  ): Promise<string> {
+    const [userAccountPDA] = await this.getUserAccountPDA(authority);
+    return this.program.methods
+      .updateAllowedMints(mints)
+      .accountsStrict({
+        userAccount: userAccountPDA,
+        authority,
+      })
+      .rpc();
   }
 
   /**
@@ -81,6 +228,22 @@ export class SessionKeySDK {
     console.log("Initialize user account tx:", tx);
 
     return tx;
+  }
+
+  async initializeUserAccountWithConfig(
+    authority: PublicKey,
+    allowedMints: PublicKey[],
+    initialDepositLamports: BN
+  ): Promise<string> {
+    const [userAccountPDA] = await this.getUserAccountPDA(authority);
+    return this.program.methods
+      .initializeUserAccountWithConfig(allowedMints, initialDepositLamports)
+      .accountsStrict({
+        userAccount: userAccountPDA,
+        authority,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
   }
 
   /**
@@ -239,64 +402,6 @@ export class SessionKeySDK {
       .rpc();
 
     return tx;
-  }
-
-  /**
-   * Execute an action using a session key
-   */
-  async executeWithSessionKey(
-    authority: PublicKey,
-    sessionKeySigner: Keypair,
-    action: SessionAction,
-    additionalAccounts?: {
-      from?: PublicKey;
-      to?: PublicKey;
-    }
-  ): Promise<string> {
-    const [userAccountPDA] = await this.getUserAccountPDA(authority);
-
-    // Determine if this is a transfer action
-    const isTransfer = "transfer" in action;
-
-    const accounts = {
-      userAccount: userAccountPDA,
-      sessionSigner: sessionKeySigner.publicKey,
-      from: isTransfer ? additionalAccounts?.from || authority : null,
-      to: isTransfer
-        ? additionalAccounts?.to || (action as any).transfer.recipient
-        : null,
-      systemProgram: isTransfer ? SystemProgram.programId : null,
-    };
-
-    const tx = await this.program.methods
-      .executeWithSessionKey(action)
-      .accountsStrict(accounts)
-      .signers([sessionKeySigner])
-      .rpc();
-
-    return tx;
-  }
-
-  /**
-   * Execute a transfer using a session key (convenience method)
-   */
-  async executeTransferWithSessionKey(
-    authority: PublicKey,
-    sessionKeySigner: Keypair,
-    recipient: PublicKey,
-    amount: BN
-  ): Promise<string> {
-    const action = {
-      transfer: {
-        recipient,
-        amount,
-      },
-    };
-
-    return this.executeWithSessionKey(authority, sessionKeySigner, action, {
-      from: authority,
-      to: recipient,
-    });
   }
 
   /**

@@ -1,6 +1,7 @@
 use crate::constants::MAX_SESSION_KEYS;
 use crate::state::UserAccount;
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 // ===== CONTEXTS =====
 
@@ -22,10 +23,27 @@ pub struct InitializeUserAccount<'info> {
 }
 
 #[derive(Accounts)]
+pub struct InitializeUserAccountWithConfig<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = UserAccount::space(MAX_SESSION_KEYS),
+        seeds = [UserAccount::SEED_PREFIX, authority.key().as_ref()],
+        bump
+    )]
+    pub user_account: Account<'info, UserAccount>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct CreateSessionKey<'info> {
     #[account(
         mut,
-        seeds = [UserAccount::SEED_PREFIX, authority.key().as_ref()],
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
         bump = user_account.bump,
         has_one = authority
     )]
@@ -40,7 +58,7 @@ pub struct CreateSessionKey<'info> {
 pub struct RevokeSessionKey<'info> {
     #[account(
         mut,
-        seeds = [UserAccount::SEED_PREFIX, authority.key().as_ref()],
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
         bump = user_account.bump,
         has_one = authority
     )]
@@ -53,7 +71,7 @@ pub struct RevokeSessionKey<'info> {
 pub struct UpdateSessionKey<'info> {
     #[account(
         mut,
-        seeds = [UserAccount::SEED_PREFIX, authority.key().as_ref()],
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
         bump = user_account.bump,
         has_one = authority
     )]
@@ -62,36 +80,13 @@ pub struct UpdateSessionKey<'info> {
     pub authority: Signer<'info>,
 }
 
-#[derive(Accounts)]
-pub struct ExecuteWithSessionKey<'info> {
-    #[account(
-        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
-        bump = user_account.bump
-    )]
-    pub user_account: Account<'info, UserAccount>,
-
-    /// The session key being used to sign this transaction
-    pub session_signer: Signer<'info>,
-
-    /// The authority account (owner of funds) - only required for transfers
-    /// CHECK: This account is validated against user_account.authority when present
-    #[account(mut)]
-    pub from: Option<AccountInfo<'info>>,
-
-    /// The recipient account - only required for transfers
-    /// CHECK: This can be any account that will receive funds
-    #[account(mut)]
-    pub to: Option<AccountInfo<'info>>,
-
-    /// System program - only required for transfers
-    pub system_program: Option<Program<'info, System>>,
-}
+// Removed SOL execute context to focus on SPL delegation only
 
 #[derive(Accounts)]
 pub struct CleanupSessionKeys<'info> {
     #[account(
         mut,
-        seeds = [UserAccount::SEED_PREFIX, authority.key().as_ref()],
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
         bump = user_account.bump,
         has_one = authority
     )]
@@ -104,7 +99,92 @@ pub struct CleanupSessionKeys<'info> {
 pub struct RevokeAllSessionKeys<'info> {
     #[account(
         mut,
-        seeds = [UserAccount::SEED_PREFIX, authority.key().as_ref()],
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
+        bump = user_account.bump,
+        has_one = authority
+    )]
+    pub user_account: Account<'info, UserAccount>,
+
+    pub authority: Signer<'info>,
+}
+
+// Removed SOL deposit/withdraw contexts
+
+// ===== SPL TOKEN CONTEXTS =====
+
+#[derive(Accounts)]
+pub struct SplApproveDelegate<'info> {
+    #[account(
+        mut,
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
+        bump = user_account.bump,
+        has_one = authority
+    )]
+    pub user_account: Account<'info, UserAccount>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub token_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: derived and checked in handler
+    pub delegate_authority: UncheckedAccount<'info>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct SplDelegatedTransfer<'info> {
+    /// Session key must sign
+    pub session_signer: Signer<'info>,
+
+    #[account(
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
+        bump = user_account.bump
+    )]
+    pub user_account: Account<'info, UserAccount>,
+
+    #[account(mut)]
+    pub from_token: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub to_token: InterfaceAccount<'info, TokenAccount>,
+
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: PDA signs via program
+    pub delegate_authority: UncheckedAccount<'info>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct SplRevokeDelegate<'info> {
+    #[account(
+        mut,
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
+        bump = user_account.bump,
+        has_one = authority
+    )]
+    pub user_account: Account<'info, UserAccount>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub token_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateAllowedMints<'info> {
+    #[account(
+        mut,
+        seeds = [UserAccount::SEED_PREFIX, user_account.authority.as_ref()],
         bump = user_account.bump,
         has_one = authority
     )]
