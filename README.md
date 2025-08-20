@@ -134,24 +134,6 @@ What’s covered:
 
 ## SDK highlights (`app/sdk.ts`)
 
-Key methods:
-
-- initializeUserAccount(authority)
-- initializeUserAccountWithConfig(authority, allowedMints, initialDepositLamports)
-- createSessionKey(authorityKeypair, sessionKeyPubkey, durationSeconds, permissions)
-- createSessionKeyWithBlockHeight(authority, sessionKeyPubkey, blocksFromNow, permissions)
-- updateSessionKey(authority, sessionKeyPubkey, newExpirySeconds?, newPermissions?)
-- revokeSessionKey(authority, sessionKeyPubkey)
-- revokeAllSessionKeys(authority)
-- cleanupSessionKeys(authority)
-- updateAllowedMints(authority, mints)
-- splApproveDelegate(authority, tokenAccount, mint, amount)
-- splDelegatedTransfer(authority, sessionKeySigner, fromToken, toToken, mint, amount)
-- splRevokeDelegate(authority, tokenAccount)
-- buildSplDelegatedTransferIx(...)
-- sendWithSessionKey(sessionKey, instructions)
-- getSessionKeys(authority) / getActiveSessionKeys(authority) / isSessionKeyValid(authority, key)
-
 Permissions shape:
 
 ```typescript
