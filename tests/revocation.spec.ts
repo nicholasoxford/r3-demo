@@ -3,11 +3,7 @@ import { Program, BN } from "@coral-xyz/anchor";
 import { SystemProgram, Keypair, PublicKey } from "@solana/web3.js";
 import { Time } from "../target/types/time";
 import { assert } from "chai";
-import {
-  TOKEN_PROGRAM_ID,
-  mintTo,
-  getOrCreateAssociatedTokenAccount,
-} from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, mintTo } from "@solana/spl-token";
 import { airdropLamports, createMintAndAtas, deriveUserPda } from "./helpers";
 
 describe("Session Key Revocation ", () => {

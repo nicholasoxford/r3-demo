@@ -302,7 +302,6 @@ describe("Session Keys (time/block)", () => {
       anchor.web3.LAMPORTS_PER_SOL
     );
     try {
-      console.log("WRONG AUTHORITY: ", wrong.publicKey.toBase58());
       await program.methods
         .updateSessionKey(
           session.publicKey,

@@ -333,11 +333,11 @@ async function realTransfers() {
 // Run all examples
 export async function runExamples() {
   try {
-    await expirationTypes();
-    await permissionExamples();
-    await teamWallet();
-    await keyManagement();
-    await cleanupExpiredKeys();
+    // await expirationTypes();
+    // await permissionExamples();
+    // await teamWallet();
+    // await keyManagement();
+    // await cleanupExpiredKeys();
     await realTransfers();
 
     console.log("\n✅ All examples completed successfully!");

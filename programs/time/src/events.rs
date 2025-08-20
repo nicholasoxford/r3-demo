@@ -1,5 +1,5 @@
-use anchor_lang::prelude::*;
 use crate::state::SessionPermissions;
+use anchor_lang::prelude::*;
 
 // ===== EVENTS =====
 

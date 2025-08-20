@@ -1,6 +1,12 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
-import { SystemProgram, Keypair, PublicKey } from "@solana/web3.js";
+import {
+  SystemProgram,
+  Keypair,
+  PublicKey,
+  Transaction,
+  Connection,
+} from "@solana/web3.js";
 import { Time } from "../target/types/time";
 import { assert } from "chai";
 import { TOKEN_PROGRAM_ID, mintTo } from "@solana/spl-token";
@@ -31,7 +37,6 @@ describe("Allowed mints behavior", () => {
       })
       .signers([authority])
       .rpc();
-
     const recipient = Keypair.generate();
     const feePayer: any = (provider.wallet as any).payer;
     const {
@@ -52,7 +57,6 @@ describe("Allowed mints behavior", () => {
       recipient.publicKey,
       6
     );
-
     await mintTo(
       provider.connection,
       authority,
@@ -87,8 +91,12 @@ describe("Allowed mints behavior", () => {
       })
       .signers([authority])
       .rpc();
-
     const session = Keypair.generate();
+    await airdropLamports(
+      provider.connection,
+      session.publicKey,
+      0.01 * anchor.web3.LAMPORTS_PER_SOL
+    );
     await program.methods
       .createSessionKey(
         session.publicKey,
@@ -111,7 +119,7 @@ describe("Allowed mints behavior", () => {
       .rpc();
 
     // Transfer with allowed mint A succeeds
-    await program.methods
+    const ix = await program.methods
       .splDelegatedTransfer(new BN(100_000_000))
       .accountsStrict({
         sessionSigner: session.publicKey,
@@ -123,7 +131,16 @@ describe("Allowed mints behavior", () => {
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([session])
-      .rpc();
+      .instruction();
+
+    const connection = new Connection("http://localhost:8899", "confirmed");
+    const tx = new Transaction().add(ix);
+    const blockhash = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash.blockhash;
+    tx.feePayer = session.publicKey;
+    tx.sign(session);
+    const sig = await connection.sendTransaction(tx, [session]);
+    await connection.confirmTransaction(sig);
 
     // Switch allowlist to only mintB
     await program.methods
