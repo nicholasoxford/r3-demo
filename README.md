@@ -1,21 +1,21 @@
 # Time-bound Session Keys
 
-A Solana program that lets you create temporary session keys with custom permissions. Think of them like temporary API keys - you can give limited access to your wallet for specific time periods and specific actions.
+A Solana program that lets you create temporary session keys with custom permissions. Think of them like temporary API keys — you can delegate limited authority from your main wallet for specific time periods and specific actions.
 
 ## What it does
 
 Session keys are temporary keypairs that can act on behalf of your main wallet, but with restrictions you define:
 
-- Set expiration times using either block height or clock time (keys auto-expire after X seconds/hours/days)
-- Control what they can do (transfers, delegate, custom actions)
-- Set transfer limits
-- Revoke them instantly if needed
+- Set expiration using either clock time or block height
+- Control allowed actions (transfer, delegate, custom)
+- Enforce transfer limits per key
+- Revoke instantly, or clean up expired keys
 
-Useful for things like mobile apps, trading bots, team wallets, or any situation where you want to delegate limited authority without exposing your main wallet.
+Great for mobile wallets, trading bots, team wallets, or any setup where you want scoped, time-bound authority.
 
 ## Why Anchor?
 
-I went with Anchor for this project because speed matters. Could've gone with Pinocchio for smaller binary size and better CU optimization, but that's premature optimization. My approach: ship something that works first, then optimize once you've got a solid baseline to measure against. Anchor gets you from idea to working prototype fast, which is exactly what you need when you're balancing product impact with shipping velocity.
+Anchor gets a secure prototype shipped fast. We optimize later once there’s a baseline to measure.
 
 ## Setup
 
@@ -34,129 +34,162 @@ solana-test-validator --reset
 anchor test --skip-local-validator
 ```
 
-## Quick Example
+## Quick examples
 
 ```typescript
+import { BN } from "@coral-xyz/anchor";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { SessionKeySDK, PermissionPreset } from "./app/sdk";
 
-// Setup
-const sdk = await SessionKeySDK.init(connection, programId, wallet);
-await sdk.initializeUserAccount(authority);
+// Initialize SDK and user account (authority is the wallet controlling the user account PDA)
+const sdk = await SessionKeySDK.init(
+  connection,
+  new PublicKey(PROGRAM_ID),
+  wallet
+);
+await sdk.initializeUserAccount(authority.publicKey);
 
-// Option 1: Time-based expiration (in seconds)
+// Time-based session key (expires in 1 hour)
 const timeKey = Keypair.generate();
 await sdk.createSessionKeyWithPreset(
   authority,
   timeKey.publicKey,
-  3600, // expires in 1 hour
+  3600,
   PermissionPreset.TRANSFER_ONLY
 );
 
-// Option 2: Block height-based expiration
+// Block-height session key (expires after ~900 slots)
 const blockKey = Keypair.generate();
 await sdk.createSessionKeyWithBlockHeight(
-  authority,
+  authority.publicKey,
   blockKey.publicKey,
-  900, // expires after ~900 blocks (~6-7 minutes on mainnet)
+  900,
   {
     canTransfer: true,
     canDelegate: false,
     canExecuteCustom: false,
-    maxTransferAmount: new BN(1000000000), // 1 SOL max
+    maxTransferAmount: new BN(1_000_000_000), // 1 token (depends on decimals)
     customFlags: 0,
   }
 );
 
-// Use either key to transfer
-await sdk.executeWithSessionKey(authority, timeKey, {
-  transfer: {
-    recipient: someWallet,
-    amount: new BN(100000000), // 0.1 SOL
-  },
+// SPL delegation flow
+// 1) Owner approves a PDA delegate for a specific mint
+await sdk.splApproveDelegate(
+  authority.publicKey,
+  ownerTokenAccount,
+  mint,
+  new BN(600_000_000)
+);
+
+// 2) Create a session key with transfer permissions and a limit
+const sessionKey = Keypair.generate();
+await sdk.createSessionKey(authority, sessionKey.publicKey, 300, {
+  canTransfer: true,
+  canDelegate: false,
+  canExecuteCustom: false,
+  maxTransferAmount: new BN(500_000_000),
+  customFlags: 0,
 });
 
+// 3) Perform delegated transfer using only the session key signer
+await sdk.splDelegatedTransfer(
+  authority.publicKey,
+  sessionKey,
+  ownerTokenAccount,
+  recipientTokenAccount,
+  mint,
+  new BN(400_000_000)
+);
+
 // Revoke when done (or let it expire)
-await sdk.revokeSessionKey(authority, timeKey.publicKey);
+await sdk.revokeSessionKey(authority.publicKey, sessionKey.publicKey);
 ```
 
-## Running Examples
+## Running examples
 
-Check out `app/examples.ts` for complete working examples:
+See `app/examples.ts` for full, runnable demos (expiration types, permissions, team wallet, key rotation, cleanup, SPL delegation):
 
 ```bash
-# Run all examples
+# Using Bun (recommended for running TS directly)
 bun run app/examples.ts
 
-# Examples included:
-# - Expiration Types: Time vs block height expiration
-# - Permission Examples: Presets and custom permissions
-# - Team Wallet: Role-based access control
-# - Key Management: Rotation and revocation
-# - Cleanup Operations: Remove expired keys
-# - Real Transfers: Actual SOL transfers with limits
+# Or with your TS runner of choice (ensure it supports TS imports)
+# ts-node app/examples.ts
 ```
 
 ## Tests
-
-The test suite covers everything:
 
 ```bash
 anchor test
 ```
 
-Tests include:
+What’s covered:
 
-- Creating and managing session keys
-- Permission validation
-- Expiration checks
-- Transfer limits
-- Revocation (single and bulk)
-- Edge cases and error conditions
+- Session key lifecycle (create/update/revoke/cleanup)
+- Time vs block-height expiration
+- Transfer limits and permission gating
+- PDA isolation and allowed mints allowlist
+- SPL delegate approve/transfer/revoke
 
-## SDK
+## SDK highlights (`app/sdk.ts`)
 
-The TypeScript SDK (`app/sdk.ts`) wraps the program with convenient methods:
+Key methods:
+
+- initializeUserAccount(authority)
+- initializeUserAccountWithConfig(authority, allowedMints, initialDepositLamports)
+- createSessionKey(authorityKeypair, sessionKeyPubkey, durationSeconds, permissions)
+- createSessionKeyWithBlockHeight(authority, sessionKeyPubkey, blocksFromNow, permissions)
+- updateSessionKey(authority, sessionKeyPubkey, newExpirySeconds?, newPermissions?)
+- revokeSessionKey(authority, sessionKeyPubkey)
+- revokeAllSessionKeys(authority)
+- cleanupSessionKeys(authority)
+- updateAllowedMints(authority, mints)
+- splApproveDelegate(authority, tokenAccount, mint, amount)
+- splDelegatedTransfer(authority, sessionKeySigner, fromToken, toToken, mint, amount)
+- splRevokeDelegate(authority, tokenAccount)
+- buildSplDelegatedTransferIx(...)
+- sendWithSessionKey(sessionKey, instructions)
+- getSessionKeys(authority) / getActiveSessionKeys(authority) / isSessionKeyValid(authority, key)
+
+Permissions shape:
 
 ```typescript
-// Permission presets make it easy
-PermissionPreset.FULL_ACCESS; // Can do anything
-PermissionPreset.TRANSFER_ONLY; // Only transfers
-PermissionPreset.LIMITED_TRANSFER; // Transfers with limits
-PermissionPreset.DELEGATE_ONLY; // Can only create sub-keys
-PermissionPreset.READ_ONLY; // Can't do anything
-
-// Or build custom permissions
-const customPerms = {
-  canTransfer: true,
-  canDelegate: false,
-  canExecuteCustom: true,
-  maxTransferAmount: new BN(1000000000), // 1 SOL max
-  customFlags: [false, false, false, false],
+type SessionPermissions = {
+  canTransfer: boolean;
+  canDelegate: boolean;
+  canExecuteCustom: boolean;
+  maxTransferAmount: BN; // 0 = unlimited
+  customFlags: number; // u32 bitfield
 };
 ```
 
-## Program Structure
+Presets available via `PermissionPreset` (FULL_ACCESS, TRANSFER_ONLY, LIMITED_TRANSFER, DELEGATE_ONLY, CUSTOM_ONLY, READ_ONLY).
 
-```
-programs/time/src/
-├── lib.rs                    # Entry point
-├── instructions/             # All the operations
-├── state.rs                  # Account structures
-├── contexts.rs              # Validation logic
-├── errors.rs                # Error codes
-└── events.rs                # Emitted events
-```
+## On-chain instructions (`programs/time/src/instructions/`)
 
-Key accounts:
+- initialize_user_account
+- initialize_user_account_with_config (sets `allowed_mints`, optional initial PDA lamports)
+- create_session_key (supports Time or BlockHeight expiration)
+- update_session_key
+- revoke_session_key
+- revoke_all_session_keys
+- cleanup_session_keys
+- update_allowed_mints (SPL mint allowlist)
+- spl_approve_delegate (owner approves PDA delegate for a mint)
+- spl_delegated_transfer (session key gated; PDA signs transfer_checked)
+- spl_revoke_delegate
 
-- `UserAccount`: PDA that stores all session keys for a user
-- `SessionKey`: Individual key with permissions and expiry
+PDAs:
+
+- `UserAccount`: seeds `["user_account", authority]`
+- `Delegate` PDA per mint: seeds `["delegate", user_account_pda, mint]`
 
 ## Notes
 
-- Each user can have up to 10 session keys
-- Keys can't extend their own permissions
-- Expired keys need manual cleanup (saves compute)
-- Session keys can create sub-keys if given permission
+- Up to 10 session keys per user (`MAX_SESSION_KEYS`)
+- Allowed mints allowlist is enforced for SPL flows; empty list means any mint is allowed
+- Cleanup of expired/revoked keys is manual (saves compute until you call it)
+- `spl_delegated_transfer` uses `transfer_checked` and works with Token and Token-2022
 
 Built with Anchor on Solana.

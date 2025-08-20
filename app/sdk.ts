@@ -257,12 +257,17 @@ export class SessionKeySDK {
   /**
    * Create a new session key with specified permissions
    */
-  async createSessionKey(
-    authority: Keypair,
-    sessionKeyPubkey: PublicKey,
-    durationSeconds: number,
-    permissions: SessionPermissions
-  ): Promise<string> {
+  async createSessionKey({
+    authority,
+    sessionKeyPubkey,
+    durationSeconds,
+    permissions,
+  }: {
+    authority: Keypair;
+    sessionKeyPubkey: PublicKey;
+    durationSeconds: number;
+    permissions: SessionPermissions;
+  }): Promise<string> {
     const [userAccountPDA] = await this.getUserAccountPDA(authority.publicKey);
     const expiresAt = new BN(Math.floor(Date.now() / 1000) + durationSeconds);
 
@@ -332,12 +337,12 @@ export class SessionKeySDK {
     preset: PermissionPreset
   ): Promise<string> {
     const permissions = this.getPermissionsFromPreset(preset);
-    return this.createSessionKey(
+    return this.createSessionKey({
       authority,
       sessionKeyPubkey,
       durationSeconds,
-      permissions
-    );
+      permissions,
+    });
   }
 
   /**
@@ -573,12 +578,12 @@ export class SessionKeySDK {
     const txs: string[] = [];
 
     for (const params of sessionKeys) {
-      const tx = await this.createSessionKey(
+      const tx = await this.createSessionKey({
         authority,
-        params.pubkey,
-        params.durationSeconds,
-        params.permissions
-      );
+        sessionKeyPubkey: params.pubkey,
+        durationSeconds: params.durationSeconds,
+        permissions: params.permissions,
+      });
       txs.push(tx);
     }
 

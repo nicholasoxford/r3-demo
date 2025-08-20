@@ -108,8 +108,6 @@ pub struct RevokeAllSessionKeys<'info> {
     pub authority: Signer<'info>,
 }
 
-// Removed SOL deposit/withdraw contexts
-
 // ===== SPL TOKEN CONTEXTS =====
 
 #[derive(Accounts)]

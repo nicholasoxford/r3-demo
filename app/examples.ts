@@ -13,11 +13,7 @@ import {
   SessionPermissions,
 } from "./sdk";
 import { BN } from "@coral-xyz/anchor";
-import {
-  createMint,
-  getOrCreateAssociatedTokenAccount,
-  mintTo,
-} from "@solana/spl-token";
+import { runSplTokenTransferExample } from "./spl_token_transfer_example";
 
 // Shared configuration
 const PROGRAM_ID = "DdtvbkajRMQj26vuAUaV96hDtzE1mzvB7k64VeWzoWib";
@@ -93,34 +89,34 @@ async function permissionExamples() {
 
   // Use preset for mobile wallet
   const mobileKey = generateSessionKey();
-  await sdk.createSessionKey(
+  await sdk.createSessionKey({
     authority,
-    mobileKey.publicKey,
-    86400, // 24 hours
-    {
+    sessionKeyPubkey: mobileKey.publicKey,
+    durationSeconds: 86400, // 24 hours
+    permissions: {
       canTransfer: true,
       canDelegate: false,
       canExecuteCustom: false,
       maxTransferAmount: new BN(0.01 * LAMPORTS_PER_SOL), // 0.01 SOL limit
       customFlags: 0,
-    }
-  );
+    },
+  });
   console.log("✅ Mobile key: limited to 0.01 SOL transfers");
 
   // Trading bot with custom permissions
   const botKey = generateSessionKey();
-  await sdk.createSessionKey(
+  await sdk.createSessionKey({
     authority,
-    botKey.publicKey,
-    3600, // 1 hour
-    {
+    sessionKeyPubkey: botKey.publicKey,
+    durationSeconds: 3600, // 1 hour
+    permissions: {
       canTransfer: true,
       canDelegate: false,
       canExecuteCustom: true, // Can interact with DEXs
       maxTransferAmount: new BN(5 * LAMPORTS_PER_SOL),
       customFlags: 1, // Custom flag for "trading only"
-    }
-  );
+    },
+  });
   console.log("✅ Bot key: can trade up to 5 SOL with DEX access");
 
   // Read-only observer key
@@ -155,12 +151,17 @@ async function teamWallet() {
         role.permissions
       );
     } else if (role.maxTransfer) {
-      await sdk.createSessionKey(authority, key.publicKey, role.days * 86400, {
-        canTransfer: true,
-        canDelegate: false,
-        canExecuteCustom: true,
-        maxTransferAmount: new BN(role.maxTransfer * LAMPORTS_PER_SOL),
-        customFlags: 0,
+      await sdk.createSessionKey({
+        authority,
+        sessionKeyPubkey: key.publicKey,
+        durationSeconds: role.days * 86400,
+        permissions: {
+          canTransfer: true,
+          canDelegate: false,
+          canExecuteCustom: true,
+          maxTransferAmount: new BN(role.maxTransfer * LAMPORTS_PER_SOL),
+          customFlags: 0,
+        },
       });
     }
 
@@ -248,83 +249,9 @@ async function cleanupExpiredKeys() {
   console.log(`After cleanup: ${after.length} keys remain`);
 }
 
-// Example 6: Real SOL Transfers with Session Keys
+// Example 6: Real SPL token transfer (delegated) moved to its own file
 async function realTransfers() {
-  const { sdk, authority, connection } = await setupExample("SPL Delegation");
-
-  // Create a new SPL mint (9 decimals) and two token accounts
-  const mint = await createMint(
-    connection,
-    authority,
-    authority.publicKey,
-    null,
-    9
-  );
-
-  const authorityAta = await getOrCreateAssociatedTokenAccount(
-    connection,
-    authority,
-    mint,
-    authority.publicKey
-  );
-
-  const recipient = Keypair.generate();
-  const recipientAta = await getOrCreateAssociatedTokenAccount(
-    connection,
-    authority,
-    mint,
-    recipient.publicKey
-  );
-
-  // Mint tokens to the authority
-  await mintTo(
-    connection,
-    authority,
-    mint,
-    authorityAta.address,
-    authority,
-    1_000_000_000n // 1 token with 9 decimals
-  );
-
-  // Approve PDA delegate for this mint
-  const approveAmount = new BN(600_000_000); // 0.6 tokens
-  await sdk.splApproveDelegate(
-    authority.publicKey,
-    authorityAta.address,
-    mint,
-    approveAmount
-  );
-
-  // Create a session key with transfer permissions and a 0.5 token limit
-  const sessionKey = generateSessionKey();
-  await sdk.createSessionKey(authority, sessionKey.publicKey, 300, {
-    canTransfer: true,
-    canDelegate: false,
-    canExecuteCustom: false,
-    maxTransferAmount: new BN(500_000_000), // 0.5 tokens
-    customFlags: 0,
-  });
-
-  // Optional: fund session key for fees if you plan to send with it as fee payer
-  const sig = await connection.requestAirdrop(
-    sessionKey.publicKey,
-    0.01 * LAMPORTS_PER_SOL
-  );
-  await connection.confirmTransaction(sig, "confirmed");
-
-  console.log("✅ Session key funded with 0.01 SOL");
-
-  // Perform delegated transfer using the session key signer
-  await sdk.splDelegatedTransfer(
-    authority.publicKey,
-    sessionKey,
-    authorityAta.address,
-    recipientAta.address,
-    mint,
-    new BN(400_000_000) // 0.4 tokens (within 0.5 limit)
-  );
-
-  console.log("✅ Delegated SPL transfer of 0.4 tokens succeeded");
+  await runSplTokenTransferExample();
 }
 
 // Run all examples
